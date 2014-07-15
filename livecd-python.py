@@ -138,7 +138,7 @@ def get_good_and_bad_srpms(ks_name):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-k', '--kickstart', default='fedora-live-base.ks')
+    parser.add_argument('-k', '--kickstart', default='fedora-livecd-desktop.ks')
     args = parser.parse_args()
     good, bad = get_good_and_bad_srpms(args.kickstart)
 
