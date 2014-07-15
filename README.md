@@ -1,8 +1,7 @@
 fedora-livecd-python3
 =====================
 
-Script to find out state of Python 3 support on Fedora livecd according to official kickstarts,
-requires livecd-tools and git to work.
+Script to find out state of Python 3 support on Fedora livecd according to official kickstarts.
 
 Ironically, this has to use Yum, therefore it needs to be written in Python 2. DNF support
 for similar functionality has been requested (https://bugzilla.redhat.com/show_bug.cgi?id=1117789)
@@ -13,10 +12,13 @@ Uses kickstarts from https://git.fedorahosted.org/git/spin-kickstarts.git
 Usage:
 
 ```
-./livecd-python.py [-k fedora-live-workstation.ks]
+./livecd-python.py (-k KICKSTART | -p KICKSTART_BY_PATH)
 ```
 
-Requires git, yum, repoquery and python3.
+You can provide kickstart either by filename of kickstart from Fedora's official spin-kickstarts
+repo (`-k`) or you can provide a path to a kickstart on your system (`-p`).
+
+Requires git, yum, repoquery and livecd-tools.
 Sample output:
 
 ```
