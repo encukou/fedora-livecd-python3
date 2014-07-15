@@ -132,7 +132,7 @@ def get_good_and_bad_srpms(ks_name):
     lgr.debug('All deps: ' + str(sorted(all_deps)))
 
     srpms_req_python = get_srpms_for_python_reverse_deps(all_deps)
-    srpms_req_python3 = get_srpms_that_br_python3(all_deps)
+    srpms_req_python3 = get_srpms_that_br_python3(srpms_req_python)
 
     return srpms_req_python3, srpms_req_python - srpms_req_python3
 
