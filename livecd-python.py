@@ -122,8 +122,13 @@ def get_srpms_that_br_python3(srpms):
     return req_python3
 
 
-def get_good_and_bad_srpms(ks_name):
-    ks_dir = checkout_ks_repo()
+def get_good_and_bad_srpms(ks_name=None, ks_path=None):
+    if ks_name and ks_path or (ks_name == ks_path == None):
+        raise ValueError('Must specify ks_name xor ks_path!')
+    if ks_name:
+        ks_dir = checkout_ks_repo()
+    else:
+        ks_dir, ks_name = os.path.split(ks_path)
     top_deps_add, top_deps_exclude = load_deps_from_ks(ks_dir, ks_name)
     lgr.debug('Adding: ' + str(top_deps_add))
     lgr.debug('Excluding: ' + str(top_deps_exclude))
@@ -138,9 +143,16 @@ def get_good_and_bad_srpms(ks_name):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-k', '--kickstart', default='fedora-livecd-desktop.ks')
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument('-k', '--kickstart',
+        help='Name of kickstart file from official spin-kickstarts repo.',
+        default=None)
+    group.add_argument('-p', '--kickstart-by-path',
+        help='Absolute/relative path to a kickstart.',
+        default=None)
     args = parser.parse_args()
-    good, bad = get_good_and_bad_srpms(args.kickstart)
+    good, bad = get_good_and_bad_srpms(ks_name=args.kickstart,
+        ks_path=args.kickstart_by_path)
 
     print('----- Good -----')
     for pkg in sorted(good):
