@@ -9,7 +9,8 @@ and I'll implement it here ASAP.
 
 Uses kickstarts from https://git.fedorahosted.org/git/spin-kickstarts.git
 
-Usage:
+livecd-python.py
+----------------
 
 ```
 ./livecd-python.py (-k KICKSTART | -p KICKSTART_BY_PATH)
@@ -19,9 +20,12 @@ You can provide kickstart either by filename of kickstart from Fedora's official
 repo (`-k`) or you can provide a path to a kickstart on your system (`-p`).
 
 Requires git, yum, repoquery and livecd-tools.
-Sample output:
 
-Or you can use the dnf script that is not yet fully sound, but works pretty ok.
+dnf-livecd-python.py
+--------------------
+
+Alternatively, you can use the dnf script that is not yet fully sound, but works pretty ok.
+
 Usage:
 
 ```
@@ -31,6 +35,9 @@ Usage:
 The arguments have the same meaning as they do for `livecd-python.py`.
 
 Requires git, dnf  and repoquery to work.
+
+Sample output
+-------------
 
 ```
 ----- Good -----
