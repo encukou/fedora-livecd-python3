@@ -21,6 +21,17 @@ repo (`-k`) or you can provide a path to a kickstart on your system (`-p`).
 Requires git, yum, repoquery and livecd-tools.
 Sample output:
 
+Or you can use the dnf script that is not yet fully sound, but works pretty ok.
+Usage:
+
+```
+./dnf-livecd-python.py (-k KICKSTART | -p KICKSTART_BY_PATH)
+```
+
+The arguments have the same meaning as they do for `livecd-python.py`.
+
+Requires git, dnf  and repoquery to work.
+
 ```
 ----- Good -----
 foo
