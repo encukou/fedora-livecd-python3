@@ -68,6 +68,9 @@ def _load_deps_from_ks(ks_dir, ks_name):
         if inside_packages:
             if not line or line.startswith('#'):
                 continue
+            comment_start = line.find('#')
+            if comment_start != -1:
+                line = line[:comment_start]
             if line.startswith('@'):
                 add_deps.add(line.strip())
             elif line.startswith('-'):
@@ -91,11 +94,9 @@ def resolve(to_add, to_exclude):
     for d in to_add:
         if d.startswith('@'):
             group = base.comps.group_by_pattern(d[1:])
-            base.group_install(group, ['default'])
-        else:
+            base.group_install(group, ['default'], exclude=to_exclude)
+        elif d not in to_exclude:
             base.install(d)
-    for d in to_exclude:
-        pass # TODO: how does DNF remove from transaction? (dnf.remove says "no package matched")
     base.resolve()
 
     names = set()
