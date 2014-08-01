@@ -11,11 +11,13 @@ dnf-livecd-python.py
 Usage:
 
 ```
-./dnf-livecd-python.py (-k KICKSTART | -p KICKSTART_BY_PATH)
+./dnf-livecd-python.py (-k KICKSTART | -p KICKSTART_BY_PATH) [-b]
 ```
 
 You can provide kickstart either by filename of kickstart from Fedora's official spin-kickstarts
 repo (`-k`) or you can provide a path to a kickstart on your system (`-p`).
+
+If you want to see a list of binary RPMs depending on Python for every SRPM, use `-b` switch.
 
 Requires python3, git, dnf  and repoquery.
 

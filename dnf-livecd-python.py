@@ -1,6 +1,4 @@
 #!/usr/bin/python3
-from __future__ import print_function
-
 import argparse
 import logging
 import os
@@ -108,9 +106,16 @@ def resolve(to_add, to_exclude):
 
 def get_srpms_for_python_reverse_deps(all_deps):
     """Find srpm names corresponding to rpms in all_deps which have "python" somewhere
-    in their requires."""
-    req_python = set()
-    for dep in all_deps:
+    in their requires.
+
+    Returns:
+        mapping of srpms to corresponding binary rpms found on livecd
+        for example:
+            {'foo': 'foo-libs', 'foo-python', ...}
+    """
+    req_python = {}
+    # preserve the order here so that we see the progress during run
+    for dep in sorted(all_deps):
         to_run = ['repoquery', '--requires', dep] + repoopts
         stdout, stderr = do_run(to_run)
         if 'python' in stdout.decode('utf-8'):
@@ -118,18 +123,22 @@ def get_srpms_for_python_reverse_deps(all_deps):
                      repoopts + repoopts_source
             stdout, stderr = do_run(to_run)
             # sometimes this seems to return multiple identical lines
-            req_python.update(stdout.decode('utf-8').splitlines())
+            srpms = stdout.decode('utf-8').splitlines()
+            for srpm in srpms:
+                req_python.setdefault(srpm, set())
+                req_python[srpm].add(dep)
     return req_python
 
 
 def get_srpms_that_br_python3(srpms):
     # find out if the srpms require "*python3*" for their build - if so, we'll mark them ok
-    req_python3 = set()
-    for dep in srpms:
+    req_python3 = {}
+    # preserve the order here so that we see the progress during run
+    for dep in sorted(srpms):
         to_run = ['repoquery', '--archlist=src', '--requires', dep] + repoopts_source
         stdout, stderr = do_run(to_run)
         if 'python3' in stdout.decode('utf-8'):
-            req_python3.add(dep)
+            req_python3[dep] = srpms[dep]
     return req_python3
 
 
@@ -150,7 +159,16 @@ def get_good_and_bad_srpms(ks_name=None, ks_path=None):
     srpms_req_python = get_srpms_for_python_reverse_deps(all_deps)
     srpms_req_python3 = get_srpms_that_br_python3(srpms_req_python)
 
-    return srpms_req_python3, srpms_req_python - srpms_req_python3
+    # remove all the python3-ported rpms from srpms_req_python
+    for good in srpms_req_python3:
+        srpms_req_python.pop(good)
+    return srpms_req_python3, srpms_req_python
+
+def print_srpm(srpm, with_rpms):
+    print(srpm[0], end='')
+    if with_rpms:
+        print(': ' + ' '.join(srpm[1]), end='')
+    print()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -161,15 +179,19 @@ if __name__ == '__main__':
     group.add_argument('-p', '--kickstart-by-path',
         help='Absolute/relative path to a kickstart.',
         default=None)
+    parser.add_argument('-b', '--binary-rpms',
+        help='In addition to SRPMs, also print names of binary RPMs.',
+        default=False,
+        action='store_true')
     args = parser.parse_args()
     good, bad = get_good_and_bad_srpms(ks_name=args.kickstart,
         ks_path=args.kickstart_by_path)
 
     print('----- Good -----')
-    for pkg in sorted(good):
-        print(pkg)
+    for srpm in sorted(good.items()):
+        print_srpm(srpm, with_rpms=args.binary_rpms)
 
     print()
     print('----- Bad -----')
-    for pkg in sorted(bad):
-        print(pkg)
+    for srpm in sorted(bad.items()):
+        print_srpm(srpm, with_rpms=args.binary_rpms)
