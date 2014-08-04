@@ -171,7 +171,7 @@ def print_srpm(srpm, with_rpms):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    group = parser.add_mutually_exclusive_group(required=True)
+    group = parser.add_mutually_exclusive_group(required=False)
     group.add_argument('-k', '--kickstart',
         help='Name of kickstart file from official spin-kickstarts repo.',
         default=None)
@@ -183,6 +183,8 @@ if __name__ == '__main__':
         default=False,
         action='store_true')
     args = parser.parse_args()
+    if not args.kickstart and not args.kickstart_by_path:
+        args.kickstart = 'fedora-live-workstation.ks'
     good, bad = get_good_and_bad_srpms(ks_name=args.kickstart,
         ks_path=args.kickstart_by_path)
 
