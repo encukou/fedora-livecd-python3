@@ -83,8 +83,7 @@ def resolve(to_add, to_exclude):
     base.conf.cachedir = '/tmp'
     base.conf.substitutions['releasever'] = 22
     repo = dnf.repo.Repo('rawhide', '/tmp')
-    repo.baseurl = \
-        ['http://download.fedoraproject.org/pub/fedora/linux/development/rawhide/x86_64/os/']
+    repo.metalink = 'https://mirrors.fedoraproject.org/metalink?repo=rawhide&arch=x86_64'
     base.repos.add(repo)
     base.fill_sack(load_system_repo=False)
     base.read_comps()
@@ -92,7 +91,7 @@ def resolve(to_add, to_exclude):
     for d in to_add:
         if d.startswith('@'):
             group = base.comps.group_by_pattern(d[1:])
-            base.group_install(group, ['default'], exclude=to_exclude)
+            base.group_install(group, ['default', 'mandatory'], exclude=to_exclude)
         elif d not in to_exclude:
             base.install(d)
     base.resolve()
