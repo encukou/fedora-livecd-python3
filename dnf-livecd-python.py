@@ -100,7 +100,7 @@ def resolve_python_reverse_deps(to_add, to_exclude):
     for transaction_item in base.transaction:
         for pkg in transaction_item.installs():
             for req in pkg.requires:
-                if 'python' in str(req):
+                if 'python' in str(req) or 'pygtk' in str(req):
                     names.add(pkg.name)
                     break
     return list(names)
