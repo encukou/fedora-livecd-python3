@@ -78,7 +78,7 @@ def _load_deps_from_ks(ks_dir, ks_name):
     return (add_deps, excl_deps)
 
 
-def resolve(to_add, to_exclude):
+def resolve_python_reverse_deps(to_add, to_exclude):
     base = dnf.Base()
     base.conf.cachedir = '/tmp'
     base.conf.substitutions['releasever'] = 22
@@ -99,13 +99,15 @@ def resolve(to_add, to_exclude):
     names = set()
     for transaction_item in base.transaction:
         for pkg in transaction_item.installs():
-            names.add(pkg.name)
+            for req in pkg.requires:
+                if 'python' in str(req):
+                    names.add(pkg.name)
+                    break
     return list(names)
 
 
-def get_srpms_for_python_reverse_deps(all_deps):
-    """Find srpm names corresponding to rpms in all_deps which have "python" somewhere
-    in their requires.
+def get_srpms_for_python_reverse_deps(python_reverse_deps):
+    """Find srpm names corresponding to given binary RPMs.
 
     Returns:
         mapping of srpms to corresponding binary rpms found on livecd
@@ -114,18 +116,15 @@ def get_srpms_for_python_reverse_deps(all_deps):
     """
     req_python = {}
     # preserve the order here so that we see the progress during run
-    for dep in sorted(all_deps):
-        to_run = ['repoquery', '--requires', dep] + repoopts
+    for dep in sorted(python_reverse_deps):
+        to_run = ['repoquery', '--srpm', '--qf', '%{name}', dep] +\
+                 repoopts + repoopts_source
         stdout, stderr = do_run(to_run)
-        if 'python' in stdout.decode('utf-8'):
-            to_run = ['repoquery', '--srpm', '--qf', '%{name}', dep] +\
-                     repoopts + repoopts_source
-            stdout, stderr = do_run(to_run)
-            # sometimes this seems to return multiple identical lines
-            srpms = stdout.decode('utf-8').splitlines()
-            for srpm in srpms:
-                req_python.setdefault(srpm, set())
-                req_python[srpm].add(dep)
+        # sometimes this seems to return multiple identical lines
+        srpms = stdout.decode('utf-8').splitlines()
+        for srpm in srpms:
+            req_python.setdefault(srpm, set())
+            req_python[srpm].add(dep)
     return req_python
 
 
@@ -152,10 +151,10 @@ def get_good_and_bad_srpms(ks_name=None, ks_path=None):
     lgr.debug('Adding: ' + str(top_deps_add))
     lgr.debug('Excluding: ' + str(top_deps_exclude))
 
-    all_deps = resolve(top_deps_add, top_deps_exclude)
-    lgr.debug('All deps: ' + str(sorted(all_deps)))
+    python_reverse_deps = resolve_python_reverse_deps(top_deps_add, top_deps_exclude)
+    lgr.debug('Python reverse deps: ' + str(sorted(python_reverse_deps)))
 
-    srpms_req_python = get_srpms_for_python_reverse_deps(all_deps)
+    srpms_req_python = get_srpms_for_python_reverse_deps(python_reverse_deps)
     srpms_req_python3 = get_srpms_that_br_python3(srpms_req_python)
 
     # remove all the python3-ported rpms from srpms_req_python
