@@ -69,12 +69,13 @@ def _load_deps_from_ks(ks_dir, ks_name):
             comment_start = line.find('#')
             if comment_start != -1:
                 line = line[:comment_start]
+            line = line.strip()
             if line.startswith('@'):
-                add_deps.add(line.strip())
+                add_deps.add(line)
             elif line.startswith('-'):
                 excl_deps.add(line[1:])
             else:
-                add_deps.add(line.strip())
+                add_deps.add(line)
     return (add_deps, excl_deps)
 
 
