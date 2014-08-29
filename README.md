@@ -5,6 +5,9 @@ Script to find out state of Python 3 support on Fedora livecd according to offic
 
 Uses kickstarts from https://git.fedorahosted.org/git/spin-kickstarts.git
 
+Note, that even with DNF 0.6.1 this still outputs more packages than there actually are on
+livecd, see `https://bugzilla.redhat.com/show_bug.cgi?id=1131969#c8`
+
 dnf-livecd-python.py
 --------------------
 
