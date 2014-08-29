@@ -149,8 +149,8 @@ def get_good_and_bad_srpms(ks_name=None, ks_path=None):
     else:
         ks_dir, ks_name = os.path.split(ks_path)
     top_deps_add, top_deps_exclude = load_deps_from_ks(ks_dir, ks_name)
-    lgr.debug('Adding: ' + str(top_deps_add))
-    lgr.debug('Excluding: ' + str(top_deps_exclude))
+    lgr.debug('Adding: ' + str(sorted(top_deps_add)))
+    lgr.debug('Excluding: ' + str(sorted(top_deps_exclude)))
 
     python_reverse_deps = resolve_python_reverse_deps(top_deps_add, top_deps_exclude)
     lgr.debug('Python reverse deps: ' + str(sorted(python_reverse_deps)))
