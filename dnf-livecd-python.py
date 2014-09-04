@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 import argparse
+import fnmatch
 import logging
 import os
 import subprocess
@@ -92,7 +93,14 @@ def resolve_python_reverse_deps(to_add, to_exclude):
     for d in to_add:
         if d.startswith('@'):
             group = base.comps.group_by_pattern(d[1:])
-            base.group_install(group, ['default', 'mandatory'], exclude=to_exclude)
+            # we can't use group_install with "exclude" parameter, see
+            #  https://bugzilla.redhat.com/show_bug.cgi?id=1131969#c11 and c12
+            for pkg in list(group.default_packages) + list(group.mandatory_packages):
+                if not any((fnmatch.fnmatchcase(pkg.name, e) for e in to_exclude)):
+                    try:
+                        base.install(pkg.name)
+                    except dnf.exceptions.MarkingError:
+                        lgr.error('Couldn\'t find "{pkg}"'.format(pkg=pkg.name))
         elif d not in to_exclude:
             base.install(d)
     base.resolve()
