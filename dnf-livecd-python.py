@@ -91,7 +91,7 @@ def resolve_python_reverse_deps(to_add, to_exclude):
     base.read_comps()
 
     for d in to_add:
-        if d.startswith('@'):
+        if d.startswith('@') and d not in to_exclude:
             group = base.comps.group_by_pattern(d[1:])
             # we can't use group_install with "exclude" parameter, see
             #  https://bugzilla.redhat.com/show_bug.cgi?id=1131969#c11 and c12
