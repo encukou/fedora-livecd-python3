@@ -24,18 +24,20 @@ def do_run(cmd):
                             stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE).communicate()
 
-def checkout_ks_repo(do_checkout=True):
-    ks_dir = os.path.join(here, 'spin-kickstarts')
+def checkout_repo(which='ks', do_checkout=True):
+    dir = os.path.join(here, 'spin-kickstarts' if which == 'ks' else 'lorax')
     if not do_checkout:
-        return ks_dir
-    if not os.path.isdir(ks_dir):
-        to_run = ['git', 'clone', 'https://git.fedorahosted.org/git/spin-kickstarts.git']
+        return dir
+    if not os.path.isdir(dir):
+        to_run = ['git', 'clone',
+            'https://git.fedorahosted.org/git/spin-kickstarts.git' if which == 'ks' else
+            'https://git.fedorahosted.org/git/lorax.git']
         do_run(to_run)
     else:
-        to_run = ['git', '-C', ks_dir, 'pull']
+        to_run = ['git', '-C', dir, 'pull']
         do_run(to_run)
 
-    return ks_dir
+    return dir
 
 def load_deps_from_ks(ks_dir, ks_name):
     """Get top dependencies from given kickstart in given dir."""
@@ -78,6 +80,17 @@ def _load_deps_from_ks(ks_dir, ks_name):
             else:
                 add_deps.add(line)
     return (add_deps, excl_deps)
+
+
+def load_deps_from_lorax(lt_dir, lt_name):
+    lt_path = os.path.join(lt_dir, lt_name)
+    lt_lines = open(lt_path, 'r').readlines()
+    ret = []
+    for line in lt_lines:
+        if line.startswith('installpkg'):
+            ret.extend(line.split()[1:])
+
+    return ret
 
 
 def resolve_python_reverse_deps(to_add, to_exclude):
@@ -149,14 +162,18 @@ def get_srpms_that_br_python3(srpms):
     return req_python3
 
 
-def get_good_and_bad_srpms(ks_name=None, ks_path=None):
-    if ks_name and ks_path or (ks_name == ks_path == None):
-        raise ValueError('Must specify ks_name xor ks_path!')
-    if ks_name:
-        ks_dir = checkout_ks_repo()
+def get_good_and_bad_srpms(ks_name=None, ks_path=None, lt_name=None):
+    # TODO: argument checking - must have precisely one
+    if ks_name or ks_path:
+        if ks_name:
+            ks_dir = checkout_repo()
+        elif ks_path:
+            ks_dir, ks_name = os.path.split(ks_path)
+        top_deps_add, top_deps_exclude = load_deps_from_ks(ks_dir, ks_name)
     else:
-        ks_dir, ks_name = os.path.split(ks_path)
-    top_deps_add, top_deps_exclude = load_deps_from_ks(ks_dir, ks_name)
+        lt_dir = checkout_repo(which='lorax')
+        top_deps_add, top_deps_exclude = load_deps_from_lorax(lt_dir, lt_name), []
+        print(top_deps_add)
     lgr.debug('Adding: ' + str(sorted(top_deps_add)))
     lgr.debug('Excluding: ' + str(sorted(top_deps_exclude)))
 
@@ -186,15 +203,18 @@ if __name__ == '__main__':
     group.add_argument('-p', '--kickstart-by-path',
         help='Absolute/relative path to a kickstart.',
         default=None)
+    group.add_argument('-l', '--lorax-template',
+        help='Name of lorax template from lorax repo, e.g. share/runtime-install.tmpl',
+        default=None)
     parser.add_argument('-b', '--binary-rpms',
         help='In addition to SRPMs, also print names of binary RPMs.',
         default=False,
         action='store_true')
     args = parser.parse_args()
-    if not args.kickstart and not args.kickstart_by_path:
+    if not args.kickstart and not args.kickstart_by_path and not args.lorax_template:
         args.kickstart = 'fedora-live-workstation.ks'
     good, bad = get_good_and_bad_srpms(ks_name=args.kickstart,
-        ks_path=args.kickstart_by_path)
+        ks_path=args.kickstart_by_path, lt_name=args.lorax_template)
 
     print('----- Good -----')
     for srpm in sorted(good.items()):
