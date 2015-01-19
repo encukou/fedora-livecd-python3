@@ -4,7 +4,6 @@ import fnmatch
 import logging
 import os
 import subprocess
-import tempfile
 
 import dnf
 
@@ -104,7 +103,7 @@ def resolve_python_reverse_deps(to_add, to_exclude, env_group_optionals):
     base.read_comps()
 
     for d in to_add:
-        if d.startswith('@') and d not in to_exclude:
+        if d.startswith('@') and not _package_excluded(d, to_exclude):
             if d.startswith('@^'):
                 env_group = base.comps.environment_by_pattern(d[2:])
                 groups = env_group.mandatory_groups
@@ -118,16 +117,16 @@ def resolve_python_reverse_deps(to_add, to_exclude, env_group_optionals):
                 if group is None:
                     lgr.error('Group not found :"{0}". Skipping ...'.format(d))
                     continue
-                elif '@' + group.id in to_exclude:
+                elif _package_excluded('@' + group.id, to_exclude):
                     # if we got the group from env group, it's still possible we may want to skip
                     continue
                 for pkg in list(group.default_packages) + list(group.mandatory_packages):
-                    if not any((fnmatch.fnmatchcase(pkg.name, e) for e in to_exclude)):
+                    if not _package_excluded(pkg.name, to_exclude):
                         try:
                             base.install(pkg.name)
                         except dnf.exceptions.MarkingError:
                             lgr.error('Couldn\'t find "{pkg}"'.format(pkg=pkg.name))
-        elif d not in to_exclude:
+        elif not _package_excluded(d, to_exclude):
             base.install(d)
     base.resolve()
 
@@ -139,6 +138,10 @@ def resolve_python_reverse_deps(to_add, to_exclude, env_group_optionals):
                     names.add(pkg.name)
                     break
     return list(names)
+
+
+def _package_excluded(pkg_name, exclude_list):
+    return any(fnmatch.fnmatchcase(pkg_name, e) for e in exclude_list)
 
 
 def get_srpms_for_python_reverse_deps(python_reverse_deps):
