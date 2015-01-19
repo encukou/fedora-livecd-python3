@@ -93,7 +93,7 @@ def load_deps_from_lorax(lt_dir, lt_name):
     return ret
 
 
-def resolve_python_reverse_deps(to_add, to_exclude):
+def resolve_python_reverse_deps(to_add, to_exclude, env_group_optionals):
     base = dnf.Base()
     base.conf.cachedir = '/tmp'
     base.conf.substitutions['releasever'] = 22
@@ -107,7 +107,9 @@ def resolve_python_reverse_deps(to_add, to_exclude):
         if d.startswith('@') and d not in to_exclude:
             if d.startswith('@^'):
                 env_group = base.comps.environment_by_pattern(d[2:])
-                groups = env_group.mandatory_groups + env_group.optional_groups
+                groups = env_group.mandatory_groups
+                if env_group_optionals:
+                    groups.extend(env_group.optional_groups)
             else:
                 groups = [base.comps.group_by_pattern(d[1:])]
             # we can't use group_install with "exclude" parameter, see
@@ -173,7 +175,7 @@ def get_srpms_that_br_python3(srpms):
     return req_python3
 
 
-def get_good_and_bad_srpms(ks_name=None, ks_path=None, lt_name=None):
+def get_good_and_bad_srpms(ks_name=None, ks_path=None, lt_name=None, env_group_optionals=False):
     # TODO: argument checking - must have precisely one
     if ks_name or ks_path:
         if ks_name:
@@ -188,7 +190,8 @@ def get_good_and_bad_srpms(ks_name=None, ks_path=None, lt_name=None):
     lgr.debug('Adding: ' + str(sorted(top_deps_add)))
     lgr.debug('Excluding: ' + str(sorted(top_deps_exclude)))
 
-    python_reverse_deps = resolve_python_reverse_deps(top_deps_add, top_deps_exclude)
+    python_reverse_deps = resolve_python_reverse_deps(top_deps_add,
+        top_deps_exclude, env_group_optionals)
     lgr.debug('Python reverse deps: ' + str(sorted(python_reverse_deps)))
 
     srpms_req_python = get_srpms_for_python_reverse_deps(python_reverse_deps)
@@ -221,11 +224,16 @@ if __name__ == '__main__':
         help='In addition to SRPMs, also print names of binary RPMs.',
         default=False,
         action='store_true')
+    parser.add_argument('--env-group-optionals',
+        help='Add optional groups from environment groups.',
+        default=False,
+        action='store_true')
     args = parser.parse_args()
     if not args.kickstart and not args.kickstart_by_path and not args.lorax_template:
         args.kickstart = 'fedora-live-workstation.ks'
     good, bad = get_good_and_bad_srpms(ks_name=args.kickstart,
-        ks_path=args.kickstart_by_path, lt_name=args.lorax_template)
+        ks_path=args.kickstart_by_path, lt_name=args.lorax_template,
+        env_group_optionals=args.env_group_optionals)
 
     print('----- Good -----')
     for srpm in sorted(good.items()):
