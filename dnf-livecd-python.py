@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 import argparse
 import fnmatch
+import json
 import logging
 import os
 import subprocess
@@ -24,13 +25,17 @@ def do_run(cmd):
                             stderr=subprocess.PIPE).communicate()
 
 def checkout_repo(which='ks', do_checkout=True):
-    dir = os.path.join(here, 'spin-kickstarts' if which == 'ks' else 'lorax')
+    which_to_repo_and_url = {
+        'ks': ('spin-kickstarts', 'https://git.fedorahosted.org/git/spin-kickstarts.git'),
+        'lorax': ('lorax', 'https://git.fedorahosted.org/git/lorax.git'),
+        'atomic': ('fedora-atomic', 'https://git.fedorahosted.org/git/fedora-atomic.git'),
+    }
+    dir, url = which_to_repo_and_url[which]
+    dir = os.path.join(here, dir)
     if not do_checkout:
         return dir
     if not os.path.isdir(dir):
-        to_run = ['git', 'clone',
-            'https://git.fedorahosted.org/git/spin-kickstarts.git' if which == 'ks' else
-            'https://git.fedorahosted.org/git/lorax.git']
+        to_run = ['git', 'clone', url]
         do_run(to_run)
     else:
         to_run = ['git', '-C', dir, 'pull']
@@ -90,6 +95,12 @@ def load_deps_from_lorax(lt_dir, lt_name):
             ret.extend(line.split()[1:])
 
     return ret
+
+
+def load_deps_from_ostree_manifest(om_dir, om_name):
+    om_path = os.path.join(om_dir, om_name)
+    om = json.load(open(om_path))
+    return om['packages'] + om['bootstrap_packages']
 
 
 def resolve_python_reverse_deps(to_add, to_exclude, env_group_optionals):
@@ -178,7 +189,8 @@ def get_srpms_that_br_python3(srpms):
     return req_python3
 
 
-def get_good_and_bad_srpms(ks_name=None, ks_path=None, lt_name=None, env_group_optionals=False):
+def get_good_and_bad_srpms(ks_name=None, ks_path=None, lt_name=None, om_name=None,
+        env_group_optionals=False):
     # TODO: argument checking - must have precisely one
     if ks_name or ks_path:
         if ks_name:
@@ -186,10 +198,12 @@ def get_good_and_bad_srpms(ks_name=None, ks_path=None, lt_name=None, env_group_o
         elif ks_path:
             ks_dir, ks_name = os.path.split(ks_path)
         top_deps_add, top_deps_exclude = load_deps_from_ks(ks_dir, ks_name)
-    else:
+    elif lt_name:
         lt_dir = checkout_repo(which='lorax')
         top_deps_add, top_deps_exclude = load_deps_from_lorax(lt_dir, lt_name), []
-        print(top_deps_add)
+    else:  # om_name
+        om_dir = checkout_repo(which='atomic')
+        top_deps_add, top_deps_exclude = load_deps_from_ostree_manifest(om_dir, om_name), []
     lgr.debug('Adding: ' + str(sorted(top_deps_add)))
     lgr.debug('Excluding: ' + str(sorted(top_deps_exclude)))
 
@@ -223,6 +237,9 @@ if __name__ == '__main__':
     group.add_argument('-l', '--lorax-template',
         help='Name of lorax template from lorax repo, e.g. share/runtime-install.tmpl',
         default=None)
+    group.add_argument('-o', '--ostree-manifest',
+        help='Name of ostree manifest from fedora-atomic repo, e.g. fedora-atomic-docker-host.json',
+        default=None)
     parser.add_argument('-b', '--binary-rpms',
         help='In addition to SRPMs, also print names of binary RPMs.',
         default=False,
@@ -232,10 +249,11 @@ if __name__ == '__main__':
         default=False,
         action='store_true')
     args = parser.parse_args()
-    if not args.kickstart and not args.kickstart_by_path and not args.lorax_template:
+    if not args.kickstart and not args.kickstart_by_path and not args.lorax_template and \
+            not args.ostree_manifest:
         args.kickstart = 'fedora-live-workstation.ks'
-    good, bad = get_good_and_bad_srpms(ks_name=args.kickstart,
-        ks_path=args.kickstart_by_path, lt_name=args.lorax_template,
+    good, bad = get_good_and_bad_srpms(ks_name=args.kickstart, ks_path=args.kickstart_by_path,
+        lt_name=args.lorax_template, om_name=args.ostree_manifest,
         env_group_optionals=args.env_group_optionals)
 
     print('----- Good -----')
