@@ -22,7 +22,7 @@ repo (`-k`) or you can provide a path to a kickstart on your system (`-p`).
 
 If you want to see a list of binary RPMs depending on Python for every SRPM, use `-b` switch.
 
-Requires python3, git, dnf  and repoquery.
+Requires python3, git and dnf.
 
 Sample output
 -------------
@@ -34,13 +34,9 @@ bar
 
 ----- Bad -----
 spam
-spam
 ```
 
-Names of srpms listed under both sections produce at least one binary RPM that has a runtime
-requirement matching ".\*python.\*". Packages in the "Good" section also BuildRequire
-".\*python3.\*", while packages in "Bad" section don't.
-(Not a 100 % approach, but works for the most part.)
-
-Together, "Good" and "Bad" packages are all packages that depend on ".\*python.\*" that
-would end up in a system produced by given kickstart.
+Names of SRPMs under each section are SRPMs that have at least one python3 (in Good)
+or python2 (bad) binary RPM on desired LiveCD. Use `-b` to find out which these binary RPMs are.
+A SRPM can end up in both sections if it has both python2 and python3 dependent binary
+RPMs on LiveCD.
