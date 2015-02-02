@@ -15,8 +15,6 @@ ch.setLevel(logging.DEBUG)
 lgr.addHandler(ch)
 
 here = os.path.dirname(__file__)
-repoopts = ['--repoid', 'rawhide']
-repoopts_source = ['--repoid', 'rawhide-source']
 
 def do_run(cmd):
     lgr.debug('Running: ' + ' '.join(cmd))
@@ -146,47 +144,47 @@ def resolve_python_reverse_deps(to_add, to_exclude, env_group_optionals):
         for pkg in transaction_item.installs():
             for req in pkg.requires:
                 if 'python' in str(req) or 'pygtk' in str(req) or 'pygobject' in str(req):
-                    names.add(pkg.name)
+                    names.add(pkg)
                     break
-    return list(names)
+    return names
 
 
 def _package_excluded(pkg_name, exclude_list):
     return any(fnmatch.fnmatchcase(pkg_name, e) for e in exclude_list)
 
 
-def get_srpms_for_python_reverse_deps(python_reverse_deps):
-    """Find srpm names corresponding to given binary RPMs.
-
-    Returns:
-        mapping of srpms to corresponding binary rpms found on livecd
-        for example:
-            {'foo': 'foo-libs', 'foo-python', ...}
-    """
-    req_python = {}
-    # preserve the order here so that we see the progress during run
-    for dep in sorted(python_reverse_deps):
-        to_run = ['repoquery', '--srpm', '--qf', '%{name}', dep] +\
-                 repoopts + repoopts_source
-        stdout, stderr = do_run(to_run)
-        # sometimes this seems to return multiple identical lines
-        srpms = stdout.decode('utf-8').splitlines()
-        for srpm in srpms:
-            req_python.setdefault(srpm, set())
-            req_python[srpm].add(dep)
-    return req_python
+def get_srpm_name_from_nvr(nvr):
+    return '-'.join(nvr.split('-')[:-2])
 
 
-def get_srpms_that_br_python3(srpms):
-    # find out if the srpms require "*python3*" for their build - if so, we'll mark them ok
-    req_python3 = {}
-    # preserve the order here so that we see the progress during run
-    for dep in sorted(srpms):
-        to_run = ['repoquery', '--archlist=src', '--requires', dep] + repoopts_source
-        stdout, stderr = do_run(to_run)
-        if 'python3' in stdout.decode('utf-8'):
-            req_python3[dep] = srpms[dep]
-    return req_python3
+def is_pkg_py3ok(pkg):
+    for req in pkg.requires:
+        if 'python(abi)' in str(req):
+            if '3' not in str(req): # a  bit fragile test...
+                return False
+            else:
+                continue
+        elif 'python' in str(req) and 'python3' not in str(req):
+            return False
+        elif 'pygobject' in str(req) or 'pygtk' in str(req):
+            return False
+
+    return True
+
+
+def find_good_and_bad(rpms):
+    # maybe we should just merge it with resolve_python_reverse_deps ...
+    good = {}
+    bad = {}
+    for rpm in rpms:
+        srpm_name = get_srpm_name_from_nvr(rpm.sourcerpm)
+        if is_pkg_py3ok(rpm):
+            good.setdefault(srpm_name, set())
+            good[srpm_name].add(rpm.name)
+        else:
+            bad.setdefault(srpm_name, set())
+            bad[srpm_name].add(rpm.name)
+    return good, bad
 
 
 def get_good_and_bad_srpms(ks_name=None, ks_path=None, lt_name=None, om_name=None,
@@ -209,15 +207,11 @@ def get_good_and_bad_srpms(ks_name=None, ks_path=None, lt_name=None, om_name=Non
 
     python_reverse_deps = resolve_python_reverse_deps(top_deps_add,
         top_deps_exclude, env_group_optionals)
-    lgr.debug('Python reverse deps: ' + str(sorted(python_reverse_deps)))
+    lgr.debug('Python reverse deps: ' + str(sorted(
+        map(lambda pkg: pkg.name, python_reverse_deps)
+    )))
 
-    srpms_req_python = get_srpms_for_python_reverse_deps(python_reverse_deps)
-    srpms_req_python3 = get_srpms_that_br_python3(srpms_req_python)
-
-    # remove all the python3-ported rpms from srpms_req_python
-    for good in srpms_req_python3:
-        srpms_req_python.pop(good)
-    return srpms_req_python3, srpms_req_python
+    return find_good_and_bad(python_reverse_deps)
 
 def print_srpm(srpm, with_rpms):
     print(srpm[0], end='')
