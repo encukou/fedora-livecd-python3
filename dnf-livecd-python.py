@@ -15,8 +15,6 @@ ch.setLevel(logging.DEBUG)
 lgr.addHandler(ch)
 
 here = os.path.dirname(__file__)
-repoopts = ['--repoid', 'rawhide']
-repoopts_source = ['--repoid', 'rawhide-source']
 
 def do_run(cmd):
     lgr.debug('Running: ' + ' '.join(cmd))
@@ -159,6 +157,21 @@ def get_srpm_name_from_nvr(nvr):
     return '-'.join(nvr.split('-')[:-2])
 
 
+def is_pkg_py3ok(pkg):
+    for req in pkg.requires:
+        if 'python(abi)' in str(req):
+            if '3' not in str(req): # a  bit fragile test...
+                return False
+            else:
+                continue
+        elif 'python' in str(req) and 'python3' not in str(req):
+            return False
+        elif 'pygobject' in str(req) or 'pygtk' in str(req):
+            return False
+
+    return True
+
+
 def get_srpms_for_python_reverse_deps(python_reverse_deps):
     """Find srpm names corresponding to given binary RPMs.
 
@@ -180,15 +193,31 @@ def get_srpms_that_br_python3(srpms):
     req_python3 = {}
     # preserve the order here so that we see the progress during run
     for dep in sorted(srpms):
-        to_run = ['repoquery', '--archlist=src', '--requires', dep] + repoopts_source
+        to_run = ['dnf', '--enablerepo=rawhide-source', 'repoquery', '--arch=src',
+                  '--repoid=rawhide-source', '--requires', dep]
         stdout, stderr = do_run(to_run)
         if 'python3' in stdout.decode('utf-8'):
             req_python3[dep] = srpms[dep]
     return req_python3
 
 
+def get_actual_good_and_bad(rpms):
+    # maybe we should just merge it with resolve_python_reverse_deps ...
+    good = {}
+    bad = {}
+    for rpm in rpms:
+        srpm_name = get_srpm_name_from_nvr(rpm.sourcerpm)
+        if is_pkg_py3ok(rpm):
+            good.setdefault(srpm_name, set())
+            good[srpm_name].add(rpm)
+        else:
+            bad.setdefault(srpm_name, set())
+            bad[srpm_name].add(rpm)
+    return good, bad
+
+
 def get_good_and_bad_srpms(ks_name=None, ks_path=None, lt_name=None, om_name=None,
-        env_group_optionals=False):
+        env_group_optionals=False, actual=False):
     # TODO: argument checking - must have precisely one
     if ks_name or ks_path:
         if ks_name:
@@ -211,13 +240,16 @@ def get_good_and_bad_srpms(ks_name=None, ks_path=None, lt_name=None, om_name=Non
         map(lambda d: d.name, python_reverse_deps)
     )))
 
-    srpms_req_python = get_srpms_for_python_reverse_deps(python_reverse_deps)
-    srpms_req_python3 = get_srpms_that_br_python3(srpms_req_python)
+    if actual:
+        return get_actual_good_and_bad(python_reverse_deps)
+    else:
+        srpms_req_python = get_srpms_for_python_reverse_deps(python_reverse_deps)
+        srpms_req_python3 = get_srpms_that_br_python3(srpms_req_python)
 
-    # remove all the python3-ported rpms from srpms_req_python
-    for good in srpms_req_python3:
-        srpms_req_python.pop(good)
-    return srpms_req_python3, srpms_req_python
+        # remove all the python3-ported rpms from srpms_req_python
+        for good in srpms_req_python3:
+            srpms_req_python.pop(good)
+        return srpms_req_python3, srpms_req_python
 
 def print_srpm(srpm, with_rpms):
     print(srpm[0], end='')
@@ -249,13 +281,17 @@ if __name__ == '__main__':
         help='Add optional groups from environment groups.',
         default=False,
         action='store_true')
+    parser.add_argument('--actual',
+        help='Query actual state, not readiness according to SRPMs',
+        default=False,
+        action='store_true')
     args = parser.parse_args()
     if not args.kickstart and not args.kickstart_by_path and not args.lorax_template and \
             not args.ostree_manifest:
         args.kickstart = 'fedora-live-workstation.ks'
     good, bad = get_good_and_bad_srpms(ks_name=args.kickstart, ks_path=args.kickstart_by_path,
         lt_name=args.lorax_template, om_name=args.ostree_manifest,
-        env_group_optionals=args.env_group_optionals)
+        env_group_optionals=args.env_group_optionals, actual=args.actual)
 
     print('----- Good -----')
     for srpm in sorted(good.items()):

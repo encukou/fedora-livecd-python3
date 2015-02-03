@@ -37,7 +37,7 @@ that depend on Python, PyGTK or PyGobject (both Python 2 and Python 3 versions o
 
 If you want to see a list of binary RPMs depending on Python for every SRPM, use `-b` switch.
 
-Requires python3, git, dnf  and repoquery.
+Requires python3, git and dnf.
 
 Sample output
 -------------
