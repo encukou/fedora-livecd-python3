@@ -105,9 +105,9 @@ def resolve_python_reverse_deps(to_add, to_exclude, env_group_optionals, release
     base = dnf.Base()
     base.conf.cachedir = '/tmp'
     base.conf.substitutions['releasever'] = 23 if release == 'rawhide' else release
-    repo = dnf.repo.Repo('repo', '/tmp')
+    repo = dnf.repo.Repo(release, '/tmp')
     repo.metalink = 'https://mirrors.fedoraproject.org/metalink?repo={0}&arch=x86_64'.\
-        format(release)
+        format(release if release == 'rawhide' else 'fedora-{0}'.format(release))
     base.repos.add(repo)
     base.fill_sack(load_system_repo=False)
     base.read_comps()
