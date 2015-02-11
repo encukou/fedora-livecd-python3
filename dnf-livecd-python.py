@@ -101,12 +101,13 @@ def load_deps_from_ostree_manifest(om_dir, om_name):
     return om['packages'] + om['bootstrap_packages']
 
 
-def resolve_python_reverse_deps(to_add, to_exclude, env_group_optionals):
+def resolve_python_reverse_deps(to_add, to_exclude, env_group_optionals, release):
     base = dnf.Base()
     base.conf.cachedir = '/tmp'
-    base.conf.substitutions['releasever'] = 22
-    repo = dnf.repo.Repo('rawhide', '/tmp')
-    repo.metalink = 'https://mirrors.fedoraproject.org/metalink?repo=rawhide&arch=x86_64'
+    base.conf.substitutions['releasever'] = 23 if release == 'rawhide' else release
+    repo = dnf.repo.Repo('repo', '/tmp')
+    repo.metalink = 'https://mirrors.fedoraproject.org/metalink?repo={0}&arch=x86_64'.\
+        format(release)
     base.repos.add(repo)
     base.fill_sack(load_system_repo=False)
     base.read_comps()
@@ -188,13 +189,23 @@ def get_srpms_for_python_reverse_deps(python_reverse_deps):
     return ret
 
 
-def get_srpms_that_br_python3(srpms):
+def get_srpms_that_br_python3(srpms, release):
     # find out if the srpms require "*python3*" for their build - if so, we'll mark them ok
     req_python3 = {}
     # preserve the order here so that we see the progress during run
     for dep in sorted(srpms):
-        to_run = ['dnf', '--enablerepo=rawhide-source', 'repoquery', '--arch=src',
-                  '--repoid=rawhide-source', '--requires', dep]
+        to_run = ['dnf']
+        if release == 'rawhide':
+            to_run.append('--enablerepo=rawhide-source')
+        else:
+            to_run.append('--releasever={0}'.format(release))
+            to_run.append('--enablerepo=fedora-source')
+        to_run.extend(['repoquery', '--arch=src'])
+        if release == 'rawhide':
+            to_run.append('--repoid=rawhide-source')
+        else:
+            to_run.append('--repoid=fedora-source')
+        to_run.extend(['--requires', dep])
         stdout, stderr = do_run(to_run)
         if 'python3' in stdout.decode('utf-8'):
             req_python3[dep] = srpms[dep]
@@ -216,8 +227,8 @@ def get_actual_good_and_bad(rpms):
     return good, bad
 
 
-def get_good_and_bad_srpms(ks_name=None, ks_path=None, lt_name=None, om_name=None,
-        env_group_optionals=False, actual=False):
+def get_good_and_bad_srpms(*, ks_name=None, ks_path=None, lt_name=None, om_name=None,
+        env_group_optionals=False, actual=False, release='rawhide'):
     # TODO: argument checking - must have precisely one
     if ks_name or ks_path:
         if ks_name:
@@ -235,7 +246,7 @@ def get_good_and_bad_srpms(ks_name=None, ks_path=None, lt_name=None, om_name=Non
     lgr.debug('Excluding: ' + str(sorted(top_deps_exclude)))
 
     python_reverse_deps = resolve_python_reverse_deps(top_deps_add,
-        top_deps_exclude, env_group_optionals)
+        top_deps_exclude, env_group_optionals, release)
     lgr.debug('Python reverse deps: ' + str(sorted(
         map(lambda d: d.name, python_reverse_deps)
     )))
@@ -244,7 +255,7 @@ def get_good_and_bad_srpms(ks_name=None, ks_path=None, lt_name=None, om_name=Non
         return get_actual_good_and_bad(python_reverse_deps)
     else:
         srpms_req_python = get_srpms_for_python_reverse_deps(python_reverse_deps)
-        srpms_req_python3 = get_srpms_that_br_python3(srpms_req_python)
+        srpms_req_python3 = get_srpms_that_br_python3(srpms_req_python, release)
 
         # remove all the python3-ported rpms from srpms_req_python
         for good in srpms_req_python3:
@@ -285,13 +296,16 @@ if __name__ == '__main__':
         help='Query actual state, not readiness according to SRPMs',
         default=False,
         action='store_true')
+    parser.add_argument('--release',
+        help='Set release to check',
+        default='rawhide')
     args = parser.parse_args()
     if not args.kickstart and not args.kickstart_by_path and not args.lorax_template and \
             not args.ostree_manifest:
         args.kickstart = 'fedora-live-workstation.ks'
     good, bad = get_good_and_bad_srpms(ks_name=args.kickstart, ks_path=args.kickstart_by_path,
         lt_name=args.lorax_template, om_name=args.ostree_manifest,
-        env_group_optionals=args.env_group_optionals, actual=args.actual)
+        env_group_optionals=args.env_group_optionals, actual=args.actual, release=args.release)
 
     print('----- Good -----')
     for srpm in sorted(good.items()):
