@@ -1,0 +1,195 @@
+#!/usr/bin/python3
+
+import argparse
+import json
+import logging
+import os
+import subprocess
+
+
+lgr = logging.getLogger(__name__)
+lgr.setLevel(logging.DEBUG)
+ch = logging.StreamHandler()
+ch.setLevel(logging.DEBUG)
+lgr.addHandler(ch)
+
+
+class SRPM(object):
+    def __init__(self, srpm, rpms=None, python3=False, reqs=None, deps=None):
+        self.srpm = srpm
+        self.rpms = {} if not rpms else rpms
+        self.python3 = python3
+        self.reqs = reqs
+        self.deps = deps
+    def __repr__(self):
+        return "SRPM: {}, rpms: {}, python3: {}, reqs: {}, deps: {}".format(self.srpm,
+            self.rpms, self.python3, self.reqs, self.deps)
+
+def do_run(cmd):
+    stdout = subprocess.Popen(cmd,
+                              stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE).communicate()[0]
+    return stdout.decode('utf-8')
+
+def split_strip_packages(output, srpm=False, rsplit=False):
+    output = output.strip().split('\n')
+    if len(output) <= 1:
+        return tuple()
+    if rsplit:
+        output = [o.rsplit('-', 2)[0] for o in output]
+    else:
+        output = [o.split(' ', 1)[0] for o in output]
+    if srpm:
+        return output[-1]
+    return tuple(output[1:])
+
+def get_packages_from_bs(bs, tag):
+    command = [bs, 'list-tagged', tag, '--rpms']
+    output = do_run(command)
+    final_list = split_strip_packages(output, rsplit=True)
+    return final_list
+
+def koji_packages():
+    requires = ['python-devel', 'python2-devel', 'python', 'python-libs', 'python(abi) = 2.7',
+                '/usr/bin/python', '/usr/bin/python2', '/usr/bin/python2.7', 'libpython2.7.so.1.0',
+                'pygtk2', 'pygobject2', 'pycairo', 'pygobject3']
+    requires.extend(['python3-devel', 'python3', 'python3-libs', 'python(abi) = 3.4',
+                '/usr/bin/python3', '/usr/bin/python3.4', 'libpython3.4m.so.1.0', 'libpython3.so',
+                'python3-pygobject', 'python3-cairo'])
+    packages = set()
+    for require in requires:
+        br_cmd = ['dnf', 'repoquery', '--enable=rawhide-source', '--repoid=rawhide-source',
+                  '--arch=src', '--whatrequires', require]
+        r_cmd = ['dnf', 'repoquery', '--enable=rawhide', '--repoid=rawhide', '--whatrequires',
+                 require]
+        lgr.debug('Getting packages: BuildRequires: {}'.format(require))
+        br_output = do_run(br_cmd)
+        br_final_list = split_strip_packages(br_output, rsplit=True)
+        lgr.debug('Found: {} packages.'.format(len(br_final_list) if br_final_list else 0))
+        if br_final_list:
+            packages.update(br_final_list)
+        lgr.debug('Getting packages: Requires: {}'.format(require))
+        r_output = do_run(r_cmd)
+        r_final_list = split_strip_packages(r_output, rsplit=True)
+        lgr.debug('Found: {} packages.'.format(len(r_final_list) if r_final_list else 0))
+        if r_final_list:
+            packages.update(r_final_list)
+    lgr.debug('Totally found: {} packages.'.format(len(packages)))
+    return tuple(sorted(packages))
+
+def get_rpm_requires(pkgs):
+#    duplicates = set()
+    python_rpms = dict()
+    for pkg in pkgs:
+#        if pkg not in duplicates:
+#            duplicates.add(pkg)
+        cmd = ['dnf', 'repoquery', '--requires',  pkg, '--enablerepo=rawhide', '--repoid=rawhide']
+        stdout = do_run(cmd)
+#            reqs = ['python', 'pygtk', 'pygobject']
+#            if any([req in stdout for req in reqs]):
+        lgr.debug('Gathering requires for package: {}'.format(pkg))
+        python_rpms[pkg] = split_strip_packages(stdout)
+    return python_rpms
+
+def get_srpms(rpms):
+    srpms = {}
+    for rpm, reqs in sorted(rpms.items()):
+        cmd = ['dnf', 'repoquery','--enable=rawhide-source', '--enable=rawhide', '-s', rpm]
+        stdout = do_run(cmd)
+        srpm = split_strip_packages(stdout, srpm=True, rsplit=True)
+        if not srpm or srpm == 'None': #sometimes repoquery returns None
+            continue
+        lgr.debug('Found: {} srpm for {} rpm.'.format(srpm, rpm))
+        nt_srpm = srpms.get(srpm, SRPM(srpm=srpm))
+        nt_srpm.rpms[rpm] = reqs
+        if not nt_srpm.reqs:
+            cmd2 = ['dnf', 'repoquery', '--enablerepo=rawhide-source',
+                    '--arch=src', '--repoid=rawhide-source', '--requires', srpm]
+            reqs = split_strip_packages(do_run(cmd2))
+            nt_srpm.reqs = reqs
+            lgr.debug('Getting: BuildRequires for {} srpm.'.format(srpm))
+        srpms[srpm] = nt_srpm
+    return srpms
+
+def mark_br_python3_ok(srpms):
+    for srpm in sorted(srpms):
+        if 'python3' in ' '.join(srpms[srpm].reqs):
+            srpms[srpm].python3 = True
+            lgr.debug('Marking: {} srpm as ok.'.format(srpm))
+    return srpms
+
+def check_unmarked_rpms(srpms):
+    for srpm in sorted(srpms):
+        if srpms[srpm].python3:
+            continue
+        reqs = [item for sublist in srpms[srpm].rpms.values() for item in sublist]
+        reqs.extend(srpms[srpm].reqs)
+        reqs = ' '.join(reqs)
+        srpms[srpm].python3 = True
+        if 'python' in reqs and not 'python3' in reqs or \
+        'pygobject' in reqs and not 'python3-gobject' in reqs or \
+        'pygtk' in reqs and not 'python3-gobject' in reqs or \
+        'pycairo' in reqs and not 'python3-cairo' in reqs or \
+        'python(abi)' in reqs and not 'python(abi) = 3' in reqs:
+            srpms[srpm].python3 = False
+            lgr.debug('Marking: {} srpm as bad.'.format(srpm))
+        else:
+            lgr.debug('Marking: {} srpm as ok.'.format(srpm))
+    return srpms
+
+def generate_deps(srpms):
+    for srpm in srpms:
+        deps = set()
+        reqs = [req for req in srpms[srpm].reqs]
+        reqs.extend([item for sublist in srpms[srpm].rpms.values() for item in sublist])
+        reqs = set(reqs)
+        for req in reqs:
+            if req in srpms.keys():
+                deps.add(req)
+                continue
+            for inner_srpm in srpms:
+                if req in srpms[inner_srpm].rpms.keys():
+                    deps.add(inner_srpm)
+                    continue
+        srpms[srpm].deps = deps
+    return srpms
+
+def write_json(srpms, output, std):
+    json_output = dict()
+    for srpm in srpms:
+        json_output[srpm] = {}
+        json_output[srpm]['aka'] = None
+        json_output[srpm]['status'] = 'released' if srpms[srpm].python3 else 'idle'
+        json_output[srpm]['link_to_bug'] = None
+        json_output[srpm]['link_to_repo'] = None
+        json_output[srpm]['contacts'] = None
+        json_output[srpm]['priority'] = None
+        json_output[srpm]['rpms'] = list(srpms[srpm].rpms.keys())
+        json_output[srpm]['deadline'] = None
+        json_output[srpm]['deps'] = list(srpms[srpm].deps)
+
+    if std:
+        print(json_output)
+    if output:
+        path = os.path.abspath(output)
+        with open(path, 'w') as f:
+            f.write(json.dumps(json_output))
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Resolve status of python2/3 support in all Fedora packages')
+    parser.add_argument('-o', '--output',
+        help='Write json output to given filename. Default value: {}'.format(os.path.abspath('output.json')),
+        default='output.json')
+    parser.add_argument('--stdout',
+        help='Write json output to stdout. Default value: False',
+        default=False,
+        action='store_true')
+    args = parser.parse_args()
+
+    list_pkgs = koji_packages()
+    filtered = get_rpm_requires(list_pkgs)
+    srpms = get_srpms(filtered)
+    srpms = mark_br_python3_ok(srpms)
+    srpms = check_unmarked_rpms(srpms)
+    srpms = generate_deps(srpms)
+    write_json(srpms, args.output, args.stdout)
