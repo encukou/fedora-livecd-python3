@@ -158,15 +158,16 @@ def write_json(srpms, output, std):
     json_output = dict()
     for srpm in srpms:
         json_output[srpm] = {}
-        json_output[srpm]['aka'] = None
         json_output[srpm]['status'] = 'released' if srpms[srpm].python3 else 'idle'
-        json_output[srpm]['link_to_bug'] = None
-        json_output[srpm]['link_to_repo'] = None
-        json_output[srpm]['contacts'] = None
-        json_output[srpm]['priority'] = None
         json_output[srpm]['rpms'] = list(srpms[srpm].rpms.keys())
-        json_output[srpm]['deadline'] = None
         json_output[srpm]['deps'] = list(srpms[srpm].deps)
+
+        # json_output[srpm]['aka'] = None
+        # json_output[srpm]['link_to_bug'] = None
+        # json_output[srpm]['link_to_repo'] = None
+        # json_output[srpm]['contacts'] = None
+        # json_output[srpm]['priority'] = None
+        # json_output[srpm]['deadline'] = None
 
     if std:
         print(json_output)
