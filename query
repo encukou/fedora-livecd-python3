@@ -173,7 +173,7 @@ def write_json(srpms, output, std):
     if output:
         path = os.path.abspath(output)
         with open(path, 'w') as f:
-            f.write(json.dumps(json_output))
+            f.write(json.dumps(json_output, indent=2, sort_keys=True))
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Resolve status of python2/3 support in all Fedora packages')
